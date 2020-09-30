@@ -1,0 +1,337 @@
+---
+title: "A/B Testing 101"
+author: "Muthia"
+date: "9/26/2020"
+output: html_document
+---
+## Variables 
+Question: Will changing the homepage photo result in more "ADOPT TODAY" clicks?
+Hypothesis: Using a photo of a cat wearing a hat will result in more "ADOPT TODAY!" clicks.
+Dependent variable: Clicked "ADOPT TODAY!" button or not.
+Independent variable: Homepage photo.
+--> So is changing the homepage photo (independent var) will change the clicked adopt today button? 
+
+## Load the library
+```{r}
+library (tidyverse)
+library (lubridate)
+```
+
+## Load the data from csv
+```{r}
+click_data <- read_csv(url("https://assets.datacamp.com/production/repositories/2292/datasets/4407050e9b8216249a6d5ff22fd67fd4c44e7301/click_data.csv"))
+click_data
+```
+
+--> Hypothesis: Using a photo of a cat wearing a hat will result in more "ADOPT TODAY!" clicks.
+We should look into the detail of the word "more". Is that "conversion rate last year? / today? / next week?"
+
+## Manipulate click data
+## Current conversion rate seasonality
+```{r}
+# Calculate the mean conversion rate by day of the week
+click_data %>%
+  group_by(wday(visit_date)) %>%
+  summarize(conversion_rate = mean(clicked_adopt_today))
+
+# Calculate the mean conversion rate by month
+click_data %>% 
+  group_by(month(visit_date)) %>%
+  summarize(conversion_rate = mean(click_adopt_today))
+
+# Calculate the mean conversion rate vary by week in the calendar year
+click_data %>%
+  group_by(wday(visit_date)) %>%
+  summarize(conversion_rate = mean(clicked_adopt_today))
+```
+
+## Plotting current conversion rate seasonality
+```{r}
+# Compute conversion rate by week of the year
+click_data_sum <- click_data %>%
+  group_by(week(visit_date)) %>%
+  summarize(conversion_rate = mean(clicked_adopt_today))
+
+# Build plot
+ggplot(click_data_sum, aes(x = `week(visit_date)`,
+                           y = conversion_rate)) +
+  geom_point() +
+  geom_line() +
+  scale_y_continuous(limits = c(0, 1))
+# We also updated our plot a bit using scale_y_continuous() to make sure our axes goes from 0 to 1 and converts the values to percentages. The percent setting comes from the scales package.
+```
+
+## Designing an Experiment - Power Analysis
+--> Power analysis
+- Power analysis will tell you how many data points (or your sample size) that you need to be sure an effect is real. 
+- Once we have our sample size, we can figure out how long we will need to run this experiment to get our number of required data points.
+- This will depend on var such as how many website hits we get per day.
+- Running a power analysis is also good because it makes we think about what statistical test we want to run before starting data collection.
+- Power analysis determines what sample size will ensure a high probability that we correctly reject the Ho that there is no difference between two groups - we'va used enough data to make a good decision
+- We should know: 
+  1. Statistical test = stat. test we plan to run
+  2. Baseline value = value for the current control condition
+  3. Desired value = expected value for the test condition
+  4. Proportion of the data from the test condition (ideally 0.5)
+  5. Significance threshold / alpha = level where effect significant (generally 0.05)
+  6. Power / 1 - beta = probability correctly rejecting null hypothesis (generally 0.8) -- meaning I want to have at least an 80% chance of correctly rejecting the Ho
+  
+## Power Analysis in R
+
+```{r}
+library(powerMediation)
+```
+
+--> The value that we're collecting is binary (clicked or didn't click), so we'll run a logistic regression
+Note: p1 = conversion rate at X = 0
+      p2 = conversion rate at X = 1 
+      # biasanya kalau kita prediksi kenaikan yang lebih besar di p2, nilai sample size nya lebih kecil dibandingkan nilai p2 yang lebih kecil (akan menghasilkan nilai sample size lebih besar)
+```{r}
+total_sample_Size <- SSizeLogisticBin(p1 = 0.2,
+                                      p2 = 0.3 # 10% boost in conversion rate 
+                                      ,
+                                      B = 0.5,
+                                      alpha = 0.05,
+                                      power = 0.8)
+total_sample_Size # Total sample size that we need
+total_sample_Size / 2 # Total sample size per condition
+```
+
+## Experiment Results 
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+experiment_data <- read_csv(url("https://assets.datacamp.com/production/repositories/2292/datasets/52b52cb1ca28ce10f9a09689325c4d94d889a6da/experiment_data.csv"))
+experiment_data
+```
+
+```{r}
+experiment_data_sum <- experiment_data %>% 
+  group_by (visit_date,condition) %>%
+  summarize(conversion_rate = mean(clicked_adopt_today))
+experiment_data_sum
+```
+
+```{r}
+ggplot(experiment_data_sum, aes(x = visit_date,
+                                y = conversion_rate, color = condition, group = condition)) + geom_point() + geom_line()
+```
+
+--> Analyzing Results
+```{r}
+library(broom)
+```
+
+```{r}
+experiment_data <- read_csv(url("https://assets.datacamp.com/production/repositories/2292/datasets/52b52cb1ca28ce10f9a09689325c4d94d889a6da/experiment_data.csv"))
+experiment_data
+
+# Logistics regression analysis
+# glm(dependent_variable ~ independent_variable, family = "what kined of distribution to use", data = your data frame)
+glm(experiment_data$clicked_adopt_today ~ experiment_data$condition,
+    family = "binomial", 
+    data = experiment_data) %>% 
+  tidy()
+
+# Result: 
+# 1. p-value for conditiontest < 0.05 (signifikan dan reject Ho)
+# 2. Test condition had a higher conversion rate (in estimate). The model estimate is a positife estimate 1.14 showing that the test condition had a higher conversion rate than control
+```
+
+# Plot Styling 1
+```{r}
+# Plot monthly summary
+ggplot(eight_month_checkin_data_sum,
+       aes(x = month_text,
+           y = conversion_rate,
+           color = condition,
+           group = condition)) +
+  geom_point() +
+  geom_line() +
+  scale_y_continuous(limits = c(0, 1),
+                     labels = percent) +
+  labs(x = "Month",
+       y = "Conversion Rate")
+```
+
+# Plot Styling 2
+```{r}
+# Plot monthly summary
+ggplot(eight_month_checkin_data_sum,
+       aes(x = month_text,
+           y = conversion_rate,
+           color = condition,
+           group = condition)) +
+  geom_point(size = 4) +
+  geom_line(lwd = 1) +
+  scale_y_continuous(limits = c(0, 1),
+                     labels = percent) +
+  labs(x = "Month",
+       y = "Conversion Rate")
+```
+```{r}
+
+```
+
+# Does the conversion rate been higher by the same rate each month? Let's check that our increased conversion rate really has been consistent.
+
+# Computing conversion rate difference
+
+```{r}
+library(tidyr)
+eight_month_checkin_data_sum <- eight_month_checkin_data %>%  mutate(month_text = month(visit_date, label = TRUE)) %>%  group_by(month_text, condition) %>%  summarize(conversion_rate = mean(clicked_adopt_today))eight_month_checkin_data_diff <- eight_month_checkin_data_sum %>%  spread(condition, conversion_rate) %>%
+  mutate(condition_diff = cat_hat - no_hat)
+# Make a new column (condition) with the value (conversion rate)
+
+```
+
+```{r}
+# Compute difference over time
+no_hat_data_diff <- no_hat_data_sum %>%
+  spread(year, conversion_rate) %>%
+  mutate(year_diff = `2018` - `2017`)
+no_hat_data_diff
+
+# Compute summary statistics
+mean(no_hat_data_diff$year_diff, na.rm = TRUE)
+sd(no_hat_data_diff$year_diff, na.rm = TRUE)
+```
+
+```{r}
+website_data <- read.csv ("https://assets.datacamp.com/production/repositories/2292/datasets/b502094e5de478105cccea959d4f915a7c0afe35/data_viz_website_2018_04.csv")
+website_data
+```
+
+```{r}
+# Compute summary by month
+website_data %>%
+  group_by(wday(visit_date), condition) %>%
+  summarize(article_conversion_rate = mean(clicked_article))
+```
+
+```{r}
+# Compute 'like' click summary by month
+website_data_sum <- website_data %>%
+  mutate(week = wday(visit_date, label = TRUE)) %>%
+  group_by(week) %>%
+  summarize(like_conversion_rate = mean(clicked_like))
+
+# Visualization
+ggplot(website_data_sum,
+       aes(x = week, y = like_conversion_rate, group = 1)) +
+  geom_point() +
+  geom_line() +
+  scale_y_continuous(limits = c(0, 1), labels = percent)
+```
+
+## Plotting A/A Data
+```{r}
+viz_website_2018_01 <- read_csv(url("https://assets.datacamp.com/production/repositories/2292/datasets/b502094e5de478105cccea959d4f915a7c0afe35/data_viz_website_2018_04.csv"))
+viz_website_2018_01
+```
+
+```{r}
+# Compute conversion rates for A/A experiment
+viz_website_2018_01_sum <- viz_website_2018_01 %>%
+  group_by(condition) %>%
+  summarize(like_conversion_rate = mean(clicked_like))
+
+viz_website_2018_01_sum
+
+# Plot conversion rates for two conditions
+ggplot(viz_website_2018_01_sum,
+       aes(x = condition, y = like_conversion_rate)) +
+  geom_bar(stat = "identity") +
+  scale_y_continuous(limits = c(0, 1))
+```
+
+## Analyzing A/A Data
+```{r}
+# Load library to clean up model outputs
+library(broom)
+
+# Run logistic regression
+aa_experiment_results <- glm(clicked_like ~ condition,
+                             family = "binomial",
+                             data = viz_website_2018_01) %>%
+  tidy()
+aa_experiment_results
+```
+There was no statistical difference between our two conditions. We can now safely say we randomly selected two groups of participants.
+
+## Confounding Variable
+```{r}
+# Plot 'like' conversion rates by date for experiment
+ggplot(viz_website_2018_01_sum,
+       aes(x = visit_date,
+           y = like_conversion_rate,
+           color = condition,
+           linetype = article_published,
+           group = interaction(condition, article_published))) +
+  geom_point() +
+  geom_line() +
+  geom_vline(xintercept = as.numeric(as.Date("2018-02-15"))) +
+  scale_y_continuous(limits = c(0, 0.3))
+```
+
+## Power Analysis in R: T- Test
+```{r}
+library(pwr)
+pwr.t.test(power = 0.8,
+           sig.level = 0.05,
+           d = 0.2 # d = effect size
+           )
+```
+You use type to describe how your data points and alternative to talk about the hypothesis of the experiment.
+
+## Note:
+ # Common statistical test for A/B testing:
+ 1. Logistic regression - a binary (categorical) dependent variable (e.g., clicked or didn't click)
+ 2. t-test (linear regression) - a continuous dependent variable (e.g., time spent on website)
+ 
+## T-Test
+```{r}
+viz_website_2018_01 <- read_csv(url("https://assets.datacamp.com/production/repositories/2292/datasets/b502094e5de478105cccea959d4f915a7c0afe35/data_viz_website_2018_04.csv"))
+viz_website_2018_01
+```
+
+```{r}
+aa_experiment_results <- t.test(time_spent_homepage_sec ~ condition, 
+                                data = viz_website_2018_01)
+aa_experiment_results
+```
+
+## T-Test vs. linear regression
+  t-test (linear regression) - a continuous dependent variable (e.g., time spent on website). Linear regression can be thought of as an extension of a t-test. While a t-test only compares 2 groups, linear regression is a powerful tools that can allow us to test multiple independent variables, and more than 2 levels for a given variable.
+
+## Multivariate Testing
+  Based on how we've designed experiments so far, we should run one experiment, choose a winner, and then run a second experiment.
+```{r}
+library(broom)
+multivar_results <- lm(time_spent_homepage_sec ~ word_one * word_two, 
+                         data = viz_website_2018_01) %>%
+  tidy()
+```
+
+## Multivariate design statistical test
+```{r}
+# Load package for cleaning model output
+library(broom)
+
+# Organize variables and run logistic regression
+viz_website_2018_05_like_results <- viz_website_2018_05 %>%
+  mutate(word_one = factor(word_one,
+                           levels = c("tips", "tools"))) %>%
+  mutate(word_two = factor(word_two,
+                           levels = c("better", "amazing"))) %>%
+  glm(clicked_like ~ word_one * word_two,
+                                    family = "binomial",
+                                    data = .) %>%
+  tidy()
+viz_website_2018_05_like_results
+```
+  
+  
