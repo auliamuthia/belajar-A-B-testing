@@ -7,8 +7,8 @@ output: html_document
 ## Variables 
 Question: Will changing the homepage photo result in more "ADOPT TODAY" clicks?
 Hypothesis: Using a photo of a cat wearing a hat will result in more "ADOPT TODAY!" clicks.
-Dependent variable: Clicked "ADOPT TODAY!" button or not (experiment group)
-Independent variable: Homepage photo (control group)
+Dependent variable: Clicked "ADOPT TODAY!" button or not (experiment var)
+Independent variable: Homepage photo (control var)
 --> So is changing the homepage photo (independent var) will change the clicked adopt today button? 
 
 ## Load the library
